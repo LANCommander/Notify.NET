@@ -16,7 +16,7 @@
 
   <!-- Pack the repo-root README into the package -->
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="../../README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,15 +27,15 @@
 
   <!-- Bundle pre-compiled native libraries for Windows -->
   <ItemGroup>
-    <Content Include="runtimes\win-x64\native\WinToastWrapper.dll" Condition="Exists('runtimes\win-x64\native\WinToastWrapper.dll')">
+    <Content Include="../../runtimes/win-x64/native/WinToastWrapper.dll" Condition="Exists('../../runtimes/win-x64/native/WinToastWrapper.dll')">
       <PackagePath>runtimes/win-x64/native/WinToastWrapper.dll</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="runtimes\win-x86\native\WinToastWrapper.dll" Condition="Exists('runtimes\win-x86\native\WinToastWrapper.dll')">
+    <Content Include="../../runtimes/win-x86/native/WinToastWrapper.dll" Condition="Exists('../../runtimes/win-x86/native/WinToastWrapper.dll')">
       <PackagePath>runtimes/win-x86/native/WinToastWrapper.dll</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="runtimes\win-arm64\native\WinToastWrapper.dll" Condition="Exists('runtimes\win-arm64\native\WinToastWrapper.dll')">
+    <Content Include="../../runtimes/win-arm64/native/WinToastWrapper.dll" Condition="Exists('../../runtimes/win-arm64/native/WinToastWrapper.dll')">
       <PackagePath>runtimes/win-arm64/native/WinToastWrapper.dll</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -43,11 +43,11 @@
 
   <!-- Bundle pre-compiled native dylibs for macOS -->
   <ItemGroup>
-    <Content Include="runtimes/osx-x64/native/libMacNotifyWrapper.dylib" Condition="Exists('runtimes/osx-x64/native/libMacNotifyWrapper.dylib')">
+    <Content Include="../../runtimes/osx-x64/native/libMacNotifyWrapper.dylib" Condition="Exists('../../runtimes/osx-x64/native/libMacNotifyWrapper.dylib')">
       <PackagePath>runtimes/osx-x64/native/libMacNotifyWrapper.dylib</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="runtimes/osx-arm64/native/libMacNotifyWrapper.dylib" Condition="Exists('runtimes/osx-arm64/native/libMacNotifyWrapper.dylib')">
+    <Content Include="../../runtimes/osx-arm64/native/libMacNotifyWrapper.dylib" Condition="Exists('../../runtimes/osx-arm64/native/libMacNotifyWrapper.dylib')">
       <PackagePath>runtimes/osx-arm64/native/libMacNotifyWrapper.dylib</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
