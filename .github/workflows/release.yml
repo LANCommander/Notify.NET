@@ -1,0 +1,166 @@
+# .github/workflows/release.yml
+#
+# Triggered by a semver tag (e.g. v1.2.3).
+#
+# Jobs:
+#   build-windows  — compiles WinToastWrapper.dll for win-x64 / win-x86 / win-arm64
+#                    using MSBuild on a Windows runner.
+#   build-macos    — compiles libMacNotifyWrapper.dylib for osx-arm64 and osx-x64
+#                    using clang cross-compilation on a macOS runner.
+#   pack           — downloads all native artifacts, packs the NuGet package with the
+#                    tag version, creates a GitHub Release, and optionally pushes to
+#                    NuGet.org (requires the NUGET_API_KEY repository secret).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write   # required to create GitHub Releases
+
+# ---------------------------------------------------------------------------
+# Windows native build — three architectures in parallel
+# ---------------------------------------------------------------------------
+jobs:
+  build-windows:
+    name: Build WinToastWrapper (${{ matrix.rid }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: x64,   rid: win-x64   }
+          - { platform: Win32, rid: win-x86   }
+          - { platform: ARM64, rid: win-arm64 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build WinToastWrapper (${{ matrix.platform }})
+        run: |
+          msbuild native\WinToastWrapper\WinToastWrapper.vcxproj `
+            /p:Configuration=Release `
+            /p:Platform=${{ matrix.platform }} `
+            /m `
+            /nologo
+
+      # The vcxproj OutDir already targets runtimes/<rid>/native/ relative to the
+      # repo root, so the DLL lands in the right place after a successful build.
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: runtimes/${{ matrix.rid }}/native/WinToastWrapper.dll
+          if-no-files-found: error
+
+# ---------------------------------------------------------------------------
+# macOS native build — both architectures on one runner via clang cross-compile
+# ---------------------------------------------------------------------------
+  build-macos:
+    name: Build MacNotifyWrapper (osx-arm64 + osx-x64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The Makefile targets arm64-apple-macos11.0 and x86_64-apple-macos10.14
+      # using -arch flags; cross-compilation works on both Intel and Apple Silicon
+      # runners because Xcode ships cross-compilers for both targets.
+      - name: Build dylibs and install to runtimes/
+        run: make -C native/MacNotifyWrapper install
+
+      - name: Upload osx-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-osx-arm64
+          path: runtimes/osx-arm64/native/libMacNotifyWrapper.dylib
+          if-no-files-found: error
+
+      - name: Upload osx-x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-osx-x64
+          path: runtimes/osx-x64/native/libMacNotifyWrapper.dylib
+          if-no-files-found: error
+
+# ---------------------------------------------------------------------------
+# NuGet pack and GitHub Release
+# ---------------------------------------------------------------------------
+  pack:
+    name: Pack NuGet and publish release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Strip the leading 'v' from the tag (v1.2.3 → 1.2.3) for use as the
+      # NuGet package version and .NET assembly version.
+      - name: Extract version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # Download every native-* artifact into artifact-staging/<artifact-name>/
+      # Each artifact contains a single file at its root (no subdirectory).
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifact-staging/
+
+      # Reconstruct the runtimes/ tree that the .csproj Content items reference.
+      # The Condition="Exists(...)" guards in the .csproj will only bundle a file
+      # if it is present here, so all five binaries must be staged before packing.
+      - name: Stage native binaries into runtimes/
+        run: |
+          mkdir -p \
+            runtimes/win-x64/native \
+            runtimes/win-x86/native \
+            runtimes/win-arm64/native \
+            runtimes/osx-x64/native \
+            runtimes/osx-arm64/native
+          cp artifact-staging/native-win-x64/WinToastWrapper.dll         runtimes/win-x64/native/
+          cp artifact-staging/native-win-x86/WinToastWrapper.dll         runtimes/win-x86/native/
+          cp artifact-staging/native-win-arm64/WinToastWrapper.dll       runtimes/win-arm64/native/
+          cp artifact-staging/native-osx-x64/libMacNotifyWrapper.dylib   runtimes/osx-x64/native/
+          cp artifact-staging/native-osx-arm64/libMacNotifyWrapper.dylib runtimes/osx-arm64/native/
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      # -p:Version overrides the hardcoded version in the .csproj for this build.
+      # --no-restore is safe here because we only need the managed code compiled;
+      # the native binaries are staged directly without a restore step.
+      - name: Pack NuGet package
+        run: |
+          dotnet pack src/Notify.NET/Notify.NET.csproj \
+            --configuration Release \
+            -p:Version=${{ env.VERSION }} \
+            --output ./nupkg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./nupkg/*.nupkg
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+      # Requires the NUGET_API_KEY repository secret to be configured.
+      # Skip this step silently if the secret is absent.
+      - name: Push to NuGet.org
+        if: ${{ secrets.NUGET_API_KEY != '' }}
+        run: |
+          dotnet nuget push ./nupkg/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
