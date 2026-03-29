@@ -98,6 +98,10 @@ jobs:
     name: Pack NuGet and publish release
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
+    # Expose the secret as an env var so it can be tested in an `if` condition.
+    # The `secrets` context is not accessible in step `if` expressions directly.
+    env:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
     steps:
       - name: Checkout
@@ -158,9 +162,9 @@ jobs:
       # Requires the NUGET_API_KEY repository secret to be configured.
       # Skip this step silently if the secret is absent.
       - name: Push to NuGet.org
-        if: ${{ secrets.NUGET_API_KEY != '' }}
+        if: ${{ env.NUGET_API_KEY != '' }}
         run: |
           dotnet nuget push ./nupkg/*.nupkg \
-            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --api-key "$NUGET_API_KEY" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
