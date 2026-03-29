@@ -10,7 +10,14 @@
     <PackageId>Notify.NET</PackageId>
     <Version>1.0.0</Version>
     <Description>Cross-platform OS notification library for .NET Standard with WinToast (Windows), libnotify (Linux), and UNUserNotificationCenter (macOS) backends.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <!-- Pack the repo-root README into the package -->
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="2.1.0" />
