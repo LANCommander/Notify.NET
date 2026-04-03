@@ -16,8 +16,14 @@ namespace Notify.NET.Abstractions
         /// <summary>Optional body text shown beneath the title.</summary>
         public string? Body { get; }
 
-        /// <summary>Absolute path to an image file to display in the notification.</summary>
+        /// <summary>Absolute path to an image file displayed as a square thumbnail.</summary>
         public string? ImagePath { get; }
+
+        /// <summary>
+        /// Absolute path to an image file displayed full-width above the title, preserving aspect ratio.
+        /// Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public string? HeroImagePath { get; }
 
         /// <summary>Action buttons to display. Maximum platform limits apply (typically 5 on Windows, varies on Linux).</summary>
         public IReadOnlyList<NotificationButton> Buttons { get; }
@@ -38,6 +44,7 @@ namespace Notify.NET.Abstractions
             string title,
             string? body,
             string? imagePath,
+            string? heroImagePath,
             IReadOnlyList<NotificationButton> buttons,
             INotificationHandler? handler,
             TimeSpan? expiration,
@@ -50,6 +57,7 @@ namespace Notify.NET.Abstractions
             Title = title;
             Body = body;
             ImagePath = imagePath;
+            HeroImagePath = heroImagePath;
             Buttons = buttons;
             Handler = handler;
             Expiration = expiration;

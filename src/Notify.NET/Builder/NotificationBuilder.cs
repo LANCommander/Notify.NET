@@ -26,6 +26,7 @@ namespace Notify.NET.Builder
         private string _title = string.Empty;
         private string? _body;
         private string? _imagePath;
+        private string? _heroImagePath;
         private readonly List<NotificationButton> _buttons = new List<NotificationButton>();
         private INotificationHandler? _handler;
         private TimeSpan? _expiration;
@@ -58,10 +59,20 @@ namespace Notify.NET.Builder
             return this;
         }
 
-        /// <summary>Sets the absolute path of an image to display in the notification.</summary>
+        /// <summary>Sets the absolute path of an image to display as a square thumbnail.</summary>
         public NotificationBuilder WithImage(string imagePath)
         {
             _imagePath = imagePath;
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the absolute path of an image to display full-width above the notification title,
+        /// preserving the image's aspect ratio. Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public NotificationBuilder WithHeroImage(string imagePath)
+        {
+            _heroImagePath = imagePath;
             return this;
         }
 
@@ -166,6 +177,7 @@ namespace Notify.NET.Builder
                 title: _title,
                 body: _body,
                 imagePath: _imagePath,
+                heroImagePath: _heroImagePath,
                 buttons: _buttons.AsReadOnly(),
                 handler: handler,
                 expiration: _expiration,

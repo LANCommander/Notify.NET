@@ -214,9 +214,10 @@ namespace Notify.NET.Platform.Windows
             // Pin managed strings as unmanaged UTF-16 memory for the duration of the call.
             // button label pointers are pinned in the IntPtr[] and that array is pinned too.
 
-            using var titlePin   = new PinnedString(request.Title);
-            using var bodyPin    = new PinnedString(request.Body);
-            using var imagePin   = new PinnedString(ResolveImagePath(request.ImagePath));
+            using var titlePin     = new PinnedString(request.Title);
+            using var bodyPin      = new PinnedString(request.Body);
+            using var imagePin     = new PinnedString(ResolveImagePath(request.ImagePath));
+            using var heroImagePin = new PinnedString(ResolveImagePath(request.HeroImagePath));
 
             // Build array of pinned button label pointers.
             var buttonPins   = new PinnedString[request.Buttons.Count];
@@ -244,6 +245,7 @@ namespace Notify.NET.Platform.Windows
                     title         = titlePin.Pointer,
                     body          = bodyPin.Pointer,
                     imagePath     = imagePin.Pointer,
+                    heroImagePath = heroImagePin.Pointer,
                     buttonLabels  = buttonArrayPtr,
                     buttonCount   = request.Buttons.Count,
                     expirationMs  = request.Expiration.HasValue ? (long)request.Expiration.Value.TotalMilliseconds : 0L,

@@ -237,8 +237,9 @@ NOTIFYAPI INT64 WNT_ShowToast(
     if (!descriptor || !handler)
         return static_cast<INT64>(WinToast::WinToastError::InvalidParameters);
 
-    bool hasBody  = descriptor->body      != nullptr && descriptor->body[0]      != L'\0';
-    bool hasImage = descriptor->imagePath != nullptr && descriptor->imagePath[0]  != L'\0';
+    bool hasBody      = descriptor->body          != nullptr && descriptor->body[0]          != L'\0';
+    bool hasImage     = descriptor->imagePath     != nullptr && descriptor->imagePath[0]     != L'\0';
+    bool hasHeroImage = descriptor->heroImagePath != nullptr && descriptor->heroImagePath[0] != L'\0';
 
     WinToastTemplate tmpl(SelectTemplateType(hasImage, hasBody));
 
@@ -248,6 +249,9 @@ NOTIFYAPI INT64 WNT_ShowToast(
 
     if (hasImage)
         tmpl.setImagePath(descriptor->imagePath);
+
+    if (hasHeroImage)
+        tmpl.setHeroImagePath(descriptor->heroImagePath);
 
     for (int i = 0; i < descriptor->buttonCount; ++i)
     {

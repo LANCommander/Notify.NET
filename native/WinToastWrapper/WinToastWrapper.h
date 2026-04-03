@@ -70,7 +70,8 @@ typedef enum _WNT_AudioOption {
 typedef struct _WNT_ToastDescriptor {
     const wchar_t*   title;          /* required */
     const wchar_t*   body;           /* nullable */
-    const wchar_t*   imagePath;      /* nullable — absolute path to an image file */
+    const wchar_t*   imagePath;      /* nullable — absolute path; displayed as a square thumbnail */
+    const wchar_t*   heroImagePath;  /* nullable — absolute path; displayed full-width, aspect ratio preserved */
     const wchar_t**  buttonLabels;   /* nullable — array of buttonCount wchar_t* */
     int              buttonCount;
     long long        expirationMs;   /* 0 = platform default */

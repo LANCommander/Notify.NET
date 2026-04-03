@@ -45,7 +45,8 @@ namespace Notify.NET.Platform.Windows
         {
             public IntPtr title;          // wchar_t*
             public IntPtr body;           // wchar_t* (may be IntPtr.Zero)
-            public IntPtr imagePath;      // wchar_t* (may be IntPtr.Zero)
+            public IntPtr imagePath;      // wchar_t* (may be IntPtr.Zero) — square thumbnail
+            public IntPtr heroImagePath;  // wchar_t* (may be IntPtr.Zero) — full-width, aspect ratio preserved
             public IntPtr buttonLabels;   // wchar_t** (array of pointers, may be IntPtr.Zero)
             public int    buttonCount;
             public long   expirationMs;   // 0 = platform default
