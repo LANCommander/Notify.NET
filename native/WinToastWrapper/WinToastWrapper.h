@@ -63,20 +63,78 @@ typedef enum _WNT_AudioOption {
 } WNT_AudioOption;
 
 /**
+ * Selects which Windows system notification sound to play.
+ * WNT_AUDIO_FILE_NONE (-1) means no specific sound file override (use AudioOption behaviour).
+ * Values 0-25 map directly to WinToastTemplate::AudioSystemFile.
+ */
+typedef enum _WNT_AudioFile {
+    WNT_AUDIO_FILE_NONE     = -1,
+    WNT_AUDIO_FILE_DEFAULT  =  0,
+    WNT_AUDIO_FILE_IM       =  1,
+    WNT_AUDIO_FILE_MAIL     =  2,
+    WNT_AUDIO_FILE_REMINDER =  3,
+    WNT_AUDIO_FILE_SMS      =  4,
+    WNT_AUDIO_FILE_ALARM    =  5,
+    WNT_AUDIO_FILE_ALARM2   =  6,
+    WNT_AUDIO_FILE_ALARM3   =  7,
+    WNT_AUDIO_FILE_ALARM4   =  8,
+    WNT_AUDIO_FILE_ALARM5   =  9,
+    WNT_AUDIO_FILE_ALARM6   = 10,
+    WNT_AUDIO_FILE_ALARM7   = 11,
+    WNT_AUDIO_FILE_ALARM8   = 12,
+    WNT_AUDIO_FILE_ALARM9   = 13,
+    WNT_AUDIO_FILE_ALARM10  = 14,
+    WNT_AUDIO_FILE_CALL     = 15,
+    WNT_AUDIO_FILE_CALL1    = 16,
+    WNT_AUDIO_FILE_CALL2    = 17,
+    WNT_AUDIO_FILE_CALL3    = 18,
+    WNT_AUDIO_FILE_CALL4    = 19,
+    WNT_AUDIO_FILE_CALL5    = 20,
+    WNT_AUDIO_FILE_CALL6    = 21,
+    WNT_AUDIO_FILE_CALL7    = 22,
+    WNT_AUDIO_FILE_CALL8    = 23,
+    WNT_AUDIO_FILE_CALL9    = 24,
+    WNT_AUDIO_FILE_CALL10   = 25
+} WNT_AudioFile;
+
+/** Controls how the app-logo image is cropped. */
+typedef enum _WNT_CropHint {
+    WNT_CROP_HINT_SQUARE = 0,
+    WNT_CROP_HINT_CIRCLE = 1
+} WNT_CropHint;
+
+/**
  * Describes the notification to display.
  * All pointer fields may be NULL where noted.
  * Callers must keep pointed-to memory valid for the duration of WNT_ShowToast.
+ *
+ * Field layout (x64, no explicit packing):
+ *   offsets 0..39   — five pointers (title, body, imagePath, heroImagePath, buttonLabels)
+ *   offset  40      — buttonCount (int, 4 bytes) + 4 bytes natural padding
+ *   offset  48      — expirationMs (long long, 8 bytes)
+ *   offset  56      — scenario (int, 4 bytes)
+ *   offset  60      — audioOption (int, 4 bytes)
+ *   offsets 64..79  — three new pointers (inlineImagePath, attributionText, customAudioPath)
+ *   offset  88      — cropHint (int, 4 bytes)
+ *   offset  92      — audioFile (int, 4 bytes)
+ * Total: 96 bytes
  */
 typedef struct _WNT_ToastDescriptor {
-    const wchar_t*   title;          /* required */
-    const wchar_t*   body;           /* nullable */
-    const wchar_t*   imagePath;      /* nullable — absolute path; displayed as a square thumbnail */
-    const wchar_t*   heroImagePath;  /* nullable — absolute path; displayed full-width, aspect ratio preserved */
-    const wchar_t**  buttonLabels;   /* nullable — array of buttonCount wchar_t* */
+    const wchar_t*   title;             /* required */
+    const wchar_t*   body;              /* nullable */
+    const wchar_t*   imagePath;         /* nullable — absolute path; app logo override in generic templates */
+    const wchar_t*   heroImagePath;     /* nullable — absolute path; full-width banner above the notification */
+    const wchar_t**  buttonLabels;      /* nullable — array of buttonCount wchar_t* */
     int              buttonCount;
-    long long        expirationMs;   /* 0 = platform default */
+    long long        expirationMs;      /* 0 = platform default */
     WNT_Scenario     scenario;
     WNT_AudioOption  audioOption;
+    /* Extended fields (added in v2): */
+    const wchar_t*   inlineImagePath;   /* nullable — image displayed inline inside the notification body */
+    const wchar_t*   attributionText;   /* nullable — small text shown at the bottom of the notification */
+    const wchar_t*   customAudioPath;   /* nullable — ms-winsoundevent: URI or ms-appx:/// path; overrides audioFile */
+    int              cropHint;          /* WNT_CropHint — how imagePath is cropped (Square or Circle) */
+    int              audioFile;         /* WNT_AudioFile — system sound to play; -1 = not overridden */
 } WNT_ToastDescriptor;
 
 /**
@@ -102,9 +160,14 @@ typedef struct _WNT_Handler {
  * @param appUserModelId  AppUserModelId (AUMI). The wrapper creates a Start-Menu
  *                        shortcut carrying this AUMI automatically if one does not
  *                        already exist.
+ * @param appIconPath     Optional absolute path to an .ico (or .exe/.dll) file whose
+ *                        first icon is stamped onto the Start-Menu shortcut. This is
+ *                        the small icon shown in the top-left corner of every toast
+ *                        notification from this app. Pass NULL to use the default
+ *                        (the host executable's icon).
  * @return TRUE on success.
  */
-NOTIFYAPI BOOL WNT_Initialize(const wchar_t* appName, const wchar_t* appUserModelId);
+NOTIFYAPI BOOL WNT_Initialize(const wchar_t* appName, const wchar_t* appUserModelId, const wchar_t* appIconPath);
 
 /**
  * Releases all WinToastLib resources. Call from the same STA thread as WNT_Initialize.

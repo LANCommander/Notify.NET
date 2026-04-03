@@ -20,6 +20,9 @@
 #define WINTOASTWRAPPER_EXPORTS
 #define NOMINMAX
 #include <Windows.h>
+#include <shlobj.h>     // SHGetFolderPathW, IShellLinkW, CLSID_ShellLink
+#include <objbase.h>    // CoCreateInstance
+#include <strsafe.h>    // StringCchCatW
 #include <string>
 #include <memory>
 #include <unordered_map>
@@ -195,7 +198,7 @@ NOTIFYAPI BOOL WNT_IsCompatible(void)
     return WinToast::isCompatible() ? TRUE : FALSE;
 }
 
-NOTIFYAPI BOOL WNT_Initialize(const wchar_t* appName, const wchar_t* appUserModelId)
+NOTIFYAPI BOOL WNT_Initialize(const wchar_t* appName, const wchar_t* appUserModelId, const wchar_t* appIconPath)
 {
     if (!WinToast::isCompatible())
         return FALSE;
@@ -212,6 +215,41 @@ NOTIFYAPI BOOL WNT_Initialize(const wchar_t* appName, const wchar_t* appUserMode
     WinToast::WinToastError error = WinToast::WinToastError::NoError;
     if (!instance->initialize(&error))
         return FALSE;
+
+    // If a custom app icon was requested, stamp it onto the Start-Menu shortcut
+    // that WinToastLib just created/verified. This icon appears in the top-left
+    // corner of every toast notification from this app.
+    if (appIconPath && appIconPath[0] != L'\0')
+    {
+        // Build the same shortcut path WinToastLib uses: %APPDATA%\Microsoft\Windows\Start Menu\Programs\{appName}.lnk
+        WCHAR linkPath[MAX_PATH] = {};
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, linkPath)))
+        {
+            if (SUCCEEDED(StringCchCatW(linkPath, MAX_PATH, L"\\Microsoft\\Windows\\Start Menu\\Programs\\")) &&
+                SUCCEEDED(StringCchCatW(linkPath, MAX_PATH, appName)) &&
+                SUCCEEDED(StringCchCatW(linkPath, MAX_PATH, L".lnk")))
+            {
+                IShellLinkW* shellLink = nullptr;
+                if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                               IID_IShellLinkW, reinterpret_cast<void**>(&shellLink))))
+                {
+                    IPersistFile* persistFile = nullptr;
+                    if (SUCCEEDED(shellLink->QueryInterface(IID_IPersistFile,
+                                                            reinterpret_cast<void**>(&persistFile))))
+                    {
+                        if (SUCCEEDED(persistFile->Load(linkPath, STGM_READWRITE)))
+                        {
+                            shellLink->SetIconLocation(appIconPath, 0);
+                            persistFile->Save(linkPath, TRUE);
+                        }
+                        persistFile->Release();
+                    }
+                    shellLink->Release();
+                }
+            }
+        }
+        // Icon update is best-effort — do not fail initialization if it doesn't succeed.
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -237,9 +275,10 @@ NOTIFYAPI INT64 WNT_ShowToast(
     if (!descriptor || !handler)
         return static_cast<INT64>(WinToast::WinToastError::InvalidParameters);
 
-    bool hasBody      = descriptor->body          != nullptr && descriptor->body[0]          != L'\0';
-    bool hasImage     = descriptor->imagePath     != nullptr && descriptor->imagePath[0]     != L'\0';
-    bool hasHeroImage = descriptor->heroImagePath != nullptr && descriptor->heroImagePath[0] != L'\0';
+    bool hasBody        = descriptor->body             != nullptr && descriptor->body[0]             != L'\0';
+    bool hasImage       = descriptor->imagePath        != nullptr && descriptor->imagePath[0]        != L'\0';
+    bool hasHeroImage   = descriptor->heroImagePath    != nullptr && descriptor->heroImagePath[0]    != L'\0';
+    bool hasInlineImage = descriptor->inlineImagePath  != nullptr && descriptor->inlineImagePath[0]  != L'\0';
 
     WinToastTemplate tmpl(SelectTemplateType(hasImage, hasBody));
 
@@ -248,10 +287,21 @@ NOTIFYAPI INT64 WNT_ShowToast(
         tmpl.setTextField(descriptor->body, WinToastTemplate::SecondLine);
 
     if (hasImage)
-        tmpl.setImagePath(descriptor->imagePath);
+    {
+        WinToastTemplate::CropHint cropHint = (descriptor->cropHint == WNT_CROP_HINT_CIRCLE)
+            ? WinToastTemplate::CropHint::Circle
+            : WinToastTemplate::CropHint::Square;
+        tmpl.setImagePath(descriptor->imagePath, cropHint);
+    }
 
-    if (hasHeroImage)
-        tmpl.setHeroImagePath(descriptor->heroImagePath);
+    // Inline image takes precedence over hero image; only one can be set at a time.
+    if (hasInlineImage)
+        tmpl.setHeroImagePath(descriptor->inlineImagePath, true /* inline */);
+    else if (hasHeroImage)
+        tmpl.setHeroImagePath(descriptor->heroImagePath, false /* banner */);
+
+    if (descriptor->attributionText != nullptr && descriptor->attributionText[0] != L'\0')
+        tmpl.setAttributionText(descriptor->attributionText);
 
     for (int i = 0; i < descriptor->buttonCount; ++i)
     {
@@ -261,6 +311,16 @@ NOTIFYAPI INT64 WNT_ShowToast(
 
     if (descriptor->expirationMs > 0)
         tmpl.setExpiration(descriptor->expirationMs);
+
+    // Audio: custom path overrides the system-sound enum; both are independent of AudioOption.
+    if (descriptor->customAudioPath != nullptr && descriptor->customAudioPath[0] != L'\0')
+    {
+        tmpl.setAudioPath(descriptor->customAudioPath);
+    }
+    else if (descriptor->audioFile >= 0)
+    {
+        tmpl.setAudioPath(static_cast<WinToastTemplate::AudioSystemFile>(descriptor->audioFile));
+    }
 
     switch (descriptor->audioOption)
     {

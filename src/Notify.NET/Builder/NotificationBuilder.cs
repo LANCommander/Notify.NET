@@ -27,6 +27,11 @@ namespace Notify.NET.Builder
         private string? _body;
         private string? _imagePath;
         private string? _heroImagePath;
+        private string? _inlineImagePath;
+        private string? _attributionText;
+        private NotificationImageCropHint _imageCropHint = NotificationImageCropHint.Square;
+        private NotificationAudioFile? _audioFile;
+        private string? _customAudioPath;
         private readonly List<NotificationButton> _buttons = new List<NotificationButton>();
         private INotificationHandler? _handler;
         private TimeSpan? _expiration;
@@ -59,7 +64,12 @@ namespace Notify.NET.Builder
             return this;
         }
 
-        /// <summary>Sets the absolute path of an image to display as a square thumbnail.</summary>
+        /// <summary>
+        /// Sets the absolute path of an image used as the app logo override — the small icon
+        /// displayed alongside the notification content. In generic toast templates (when a hero
+        /// or inline image is present, or when crop hint is <see cref="NotificationImageCropHint.Circle"/>)
+        /// this replaces the default app icon. Windows only — ignored on Linux and macOS.
+        /// </summary>
         public NotificationBuilder WithImage(string imagePath)
         {
             _imagePath = imagePath;
@@ -68,11 +78,69 @@ namespace Notify.NET.Builder
 
         /// <summary>
         /// Sets the absolute path of an image to display full-width above the notification title,
-        /// preserving the image's aspect ratio. Windows only — ignored on Linux and macOS.
+        /// preserving the image's aspect ratio.
+        /// Mutually exclusive with <see cref="WithInlineImage"/>; if both are set the inline image takes precedence.
+        /// Windows only — ignored on Linux and macOS.
         /// </summary>
         public NotificationBuilder WithHeroImage(string imagePath)
         {
             _heroImagePath = imagePath;
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the absolute path of an image displayed inline inside the notification body.
+        /// Takes precedence over <see cref="WithHeroImage"/> when both are set.
+        /// Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public NotificationBuilder WithInlineImage(string imagePath)
+        {
+            _inlineImagePath = imagePath;
+            return this;
+        }
+
+        /// <summary>
+        /// Sets small attribution text shown at the bottom of the notification (e.g. a source name or URL).
+        /// Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public NotificationBuilder WithAttributionText(string text)
+        {
+            _attributionText = text;
+            return this;
+        }
+
+        /// <summary>
+        /// Controls how <see cref="WithImage"/> is cropped when displayed as the app logo override.
+        /// <see cref="NotificationImageCropHint.Circle"/> also forces the toast into generic template
+        /// mode, which enables hero/inline images and attribution text.
+        /// Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public NotificationBuilder WithImageCropHint(NotificationImageCropHint cropHint)
+        {
+            _imageCropHint = cropHint;
+            return this;
+        }
+
+        /// <summary>
+        /// Selects a specific Windows system notification sound. Overrides the default sound
+        /// selection while still respecting the <see cref="WithAudio"/> loop/silence setting.
+        /// Ignored when <see cref="WithCustomAudioPath"/> is also set.
+        /// Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public NotificationBuilder WithAudioFile(NotificationAudioFile audioFile)
+        {
+            _audioFile = audioFile;
+            return this;
+        }
+
+        /// <summary>
+        /// Sets a custom audio URI (e.g. <c>ms-appx:///sounds/alert.mp3</c> or a
+        /// <c>ms-winsoundevent:</c> URI). Takes precedence over <see cref="WithAudioFile"/>.
+        /// Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public NotificationBuilder WithCustomAudioPath(string audioPath)
+        {
+            _customAudioPath = audioPath;
             return this;
         }
 
@@ -178,6 +246,11 @@ namespace Notify.NET.Builder
                 body: _body,
                 imagePath: _imagePath,
                 heroImagePath: _heroImagePath,
+                inlineImagePath: _inlineImagePath,
+                attributionText: _attributionText,
+                imageCropHint: _imageCropHint,
+                audioFile: _audioFile,
+                customAudioPath: _customAudioPath,
                 buttons: _buttons.AsReadOnly(),
                 handler: handler,
                 expiration: _expiration,

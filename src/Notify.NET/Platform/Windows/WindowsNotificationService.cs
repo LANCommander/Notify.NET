@@ -23,6 +23,7 @@ namespace Notify.NET.Platform.Windows
     {
         private readonly string _appName;
         private readonly string _appUserModelId;
+        private readonly string? _appIconPath;
 
         private readonly Thread _staThread;
         private readonly BlockingCollection<Action> _workQueue = new BlockingCollection<Action>();
@@ -40,10 +41,16 @@ namespace Notify.NET.Platform.Windows
         /// A Start-Menu shortcut carrying this AUMI is required for notifications to persist in
         /// the Action Centre. The native wrapper creates the shortcut automatically when missing.
         /// </param>
-        public WindowsNotificationService(string appName, string appUserModelId)
+        /// <param name="appIconPath">
+        /// Optional absolute path to an .ico (or .exe/.dll) file whose first icon is used as the
+        /// small icon in the top-left corner of every toast notification from this app.
+        /// Pass null to use the host executable's default icon.
+        /// </param>
+        public WindowsNotificationService(string appName, string appUserModelId, string? appIconPath = null)
         {
             _appName = appName ?? throw new ArgumentNullException(nameof(appName));
             _appUserModelId = appUserModelId ?? throw new ArgumentNullException(nameof(appUserModelId));
+            _appIconPath = appIconPath;
 
             _staThread = new Thread(StaThreadProc)
             {
@@ -171,7 +178,7 @@ namespace Notify.NET.Platform.Windows
                     return;
                 }
 
-                bool ok = WinToastNative.WNT_Initialize(_appName, _appUserModelId);
+                bool ok = WinToastNative.WNT_Initialize(_appName, _appUserModelId, _appIconPath);
                 if (!ok)
                 {
                     _initException = new NotificationException("WNT_Initialize returned false.");
@@ -214,10 +221,13 @@ namespace Notify.NET.Platform.Windows
             // Pin managed strings as unmanaged UTF-16 memory for the duration of the call.
             // button label pointers are pinned in the IntPtr[] and that array is pinned too.
 
-            using var titlePin     = new PinnedString(request.Title);
-            using var bodyPin      = new PinnedString(request.Body);
-            using var imagePin     = new PinnedString(ResolveImagePath(request.ImagePath));
-            using var heroImagePin = new PinnedString(ResolveImagePath(request.HeroImagePath));
+            using var titlePin         = new PinnedString(request.Title);
+            using var bodyPin          = new PinnedString(request.Body);
+            using var imagePin         = new PinnedString(ResolveImagePath(request.ImagePath));
+            using var heroImagePin     = new PinnedString(ResolveImagePath(request.HeroImagePath));
+            using var inlineImagePin   = new PinnedString(ResolveImagePath(request.InlineImagePath));
+            using var attributionPin   = new PinnedString(request.AttributionText);
+            using var customAudioPin   = new PinnedString(request.CustomAudioPath);
 
             // Build array of pinned button label pointers.
             var buttonPins   = new PinnedString[request.Buttons.Count];
@@ -242,15 +252,24 @@ namespace Notify.NET.Platform.Windows
 
                 var descriptor = new WinToastNative.WNT_ToastDescriptor
                 {
-                    title         = titlePin.Pointer,
-                    body          = bodyPin.Pointer,
-                    imagePath     = imagePin.Pointer,
-                    heroImagePath = heroImagePin.Pointer,
-                    buttonLabels  = buttonArrayPtr,
-                    buttonCount   = request.Buttons.Count,
-                    expirationMs  = request.Expiration.HasValue ? (long)request.Expiration.Value.TotalMilliseconds : 0L,
-                    scenario      = MapScenario(request.Urgency),
-                    audioOption   = MapAudio(request.Audio)
+                    title           = titlePin.Pointer,
+                    body            = bodyPin.Pointer,
+                    imagePath       = imagePin.Pointer,
+                    heroImagePath   = heroImagePin.Pointer,
+                    buttonLabels    = buttonArrayPtr,
+                    buttonCount     = request.Buttons.Count,
+                    expirationMs    = request.Expiration.HasValue ? (long)request.Expiration.Value.TotalMilliseconds : 0L,
+                    scenario        = MapScenario(request.Urgency),
+                    audioOption     = MapAudio(request.Audio),
+                    inlineImagePath = inlineImagePin.Pointer,
+                    attributionText = attributionPin.Pointer,
+                    customAudioPath = customAudioPin.Pointer,
+                    cropHint        = request.ImageCropHint == NotificationImageCropHint.Circle
+                                          ? WinToastNative.WNT_CROP_HINT_CIRCLE
+                                          : WinToastNative.WNT_CROP_HINT_SQUARE,
+                    audioFile       = request.AudioFile.HasValue
+                                          ? (int)request.AudioFile.Value
+                                          : WinToastNative.WNT_AUDIO_FILE_NONE
                 };
 
                 var handler = new WinToastNative.WNT_Handler

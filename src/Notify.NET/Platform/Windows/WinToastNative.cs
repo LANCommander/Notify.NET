@@ -43,15 +43,21 @@ namespace Notify.NET.Platform.Windows
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         internal struct WNT_ToastDescriptor
         {
-            public IntPtr title;          // wchar_t*
-            public IntPtr body;           // wchar_t* (may be IntPtr.Zero)
-            public IntPtr imagePath;      // wchar_t* (may be IntPtr.Zero) — square thumbnail
-            public IntPtr heroImagePath;  // wchar_t* (may be IntPtr.Zero) — full-width, aspect ratio preserved
-            public IntPtr buttonLabels;   // wchar_t** (array of pointers, may be IntPtr.Zero)
+            public IntPtr title;             // wchar_t*
+            public IntPtr body;              // wchar_t* (may be IntPtr.Zero)
+            public IntPtr imagePath;         // wchar_t* (may be IntPtr.Zero) — app logo override in generic templates
+            public IntPtr heroImagePath;     // wchar_t* (may be IntPtr.Zero) — full-width banner above notification
+            public IntPtr buttonLabels;      // wchar_t** (array of pointers, may be IntPtr.Zero)
             public int    buttonCount;
-            public long   expirationMs;   // 0 = platform default
-            public int    scenario;       // WNT_Scenario enum value
-            public int    audioOption;    // WNT_AudioOption enum value
+            public long   expirationMs;      // 0 = platform default
+            public int    scenario;          // WNT_Scenario enum value
+            public int    audioOption;       // WNT_AudioOption enum value
+            // Extended fields (v2):
+            public IntPtr inlineImagePath;   // wchar_t* (may be IntPtr.Zero) — image shown inline in notification body
+            public IntPtr attributionText;   // wchar_t* (may be IntPtr.Zero) — small text at the bottom
+            public IntPtr customAudioPath;   // wchar_t* (may be IntPtr.Zero) — ms-winsoundevent: or file URI; overrides audioFile
+            public int    cropHint;          // WNT_CropHint (0 = Square, 1 = Circle)
+            public int    audioFile;         // WNT_AudioFile (-1 = not set)
         }
 
         /// <summary>
@@ -68,15 +74,28 @@ namespace Notify.NET.Platform.Windows
         }
 
         // WNT_Scenario values (must match enum in WinToastWrapper.h)
-        internal const int WNT_SCENARIO_DEFAULT      = 0;
-        internal const int WNT_SCENARIO_ALARM        = 1;
-        internal const int WNT_SCENARIO_REMINDER     = 2;
+        internal const int WNT_SCENARIO_DEFAULT       = 0;
+        internal const int WNT_SCENARIO_ALARM         = 1;
+        internal const int WNT_SCENARIO_REMINDER      = 2;
         internal const int WNT_SCENARIO_INCOMING_CALL = 3;
 
         // WNT_AudioOption values (must match enum in WinToastWrapper.h)
         internal const int WNT_AUDIO_DEFAULT = 0;
         internal const int WNT_AUDIO_SILENT  = 1;
         internal const int WNT_AUDIO_LOOP    = 2;
+
+        // WNT_CropHint values (must match enum in WinToastWrapper.h)
+        internal const int WNT_CROP_HINT_SQUARE = 0;
+        internal const int WNT_CROP_HINT_CIRCLE = 1;
+
+        // WNT_AudioFile values (must match enum in WinToastWrapper.h)
+        internal const int WNT_AUDIO_FILE_NONE    = -1;
+        internal const int WNT_AUDIO_FILE_DEFAULT =  0;
+        internal const int WNT_AUDIO_FILE_IM      =  1;
+        internal const int WNT_AUDIO_FILE_MAIL    =  2;
+        internal const int WNT_AUDIO_FILE_REMINDER =  3;
+        internal const int WNT_AUDIO_FILE_SMS     =  4;
+        internal const int WNT_AUDIO_FILE_ALARM   =  5;
 
         // -------------------------------------------------------------------------
         // Exported functions
@@ -93,7 +112,7 @@ namespace Notify.NET.Platform.Windows
         /// <returns>true on success.</returns>
         [DllImport(DllName, EntryPoint = "WNT_Initialize", CharSet = CharSet.Unicode, SetLastError = false)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool WNT_Initialize(string appName, string appUserModelId);
+        internal static extern bool WNT_Initialize(string appName, string appUserModelId, string? appIconPath);
 
         /// <summary>Uninitialises WinToastLib and releases all internal resources.</summary>
         [DllImport(DllName, EntryPoint = "WNT_Uninitialize")]

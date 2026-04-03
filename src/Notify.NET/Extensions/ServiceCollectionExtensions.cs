@@ -62,7 +62,7 @@ namespace Notify.NET.Extensions
         private static INotificationService CreateService(NotificationOptions opts)
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                return new WindowsNotificationService(opts.AppName, opts.AppUserModelId);
+                return new WindowsNotificationService(opts.AppName, opts.AppUserModelId, opts.AppIconPath);
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 return new LinuxNotificationService(opts.AppName);
@@ -95,6 +95,14 @@ namespace Notify.NET.Extensions
         /// </summary>
         public string AppUserModelId { get; set; } =
             System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+
+        /// <summary>
+        /// Optional absolute path to an .ico (or .exe/.dll) file whose first icon is stamped onto
+        /// the Start-Menu shortcut and shown as the small icon in the top-left corner of every toast
+        /// notification from this app. Set once at startup; null uses the host executable's icon.
+        /// Windows only — ignored on Linux and macOS.
+        /// </summary>
+        public string? AppIconPath { get; set; }
     }
 
     /// <summary>
