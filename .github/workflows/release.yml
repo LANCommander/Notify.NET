@@ -27,7 +27,9 @@ permissions:
 jobs:
   build-windows:
     name: Build WinToastWrapper (${{ matrix.rid }})
-    runs-on: windows-latest
+    # Pinned to windows-2022 because the project uses the v143 (VS 2022) toolset.
+    # windows-latest moved to a newer Visual Studio that no longer ships v143.
+    runs-on: windows-2022
     strategy:
       fail-fast: false
       matrix:
