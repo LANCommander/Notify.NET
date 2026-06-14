@@ -55,6 +55,15 @@ typedef void (*MNW_FailedCallback)         (int64_t notifId);
 #define MNW_INTERRUPTION_CRITICAL        3
 
 /* -------------------------------------------------------------------------
+ * Dock-tile progress states (passed to MNW_SetTaskbarProgress)
+ * ------------------------------------------------------------------------- */
+#define MNW_PROGRESS_NONE           0  /* Clear the progress bar */
+#define MNW_PROGRESS_INDETERMINATE  1  /* Animated bar with no specific value */
+#define MNW_PROGRESS_NORMAL         2  /* Determinate bar at `fraction` */
+#define MNW_PROGRESS_PAUSED         3  /* Same visual as NORMAL (Dock cannot tint) */
+#define MNW_PROGRESS_ERROR          4  /* Same visual as NORMAL (Dock cannot tint) */
+
+/* -------------------------------------------------------------------------
  * Handler — bundle of four callback function pointers, copied by value.
  * Any pointer may be NULL to opt out of that event.
  * ------------------------------------------------------------------------- */
@@ -121,6 +130,21 @@ MACNOTIFYAPI int64_t MNW_ShowNotification(
  * Returns true if the notification was found and removed.
  */
 MACNOTIFYAPI bool MNW_HideNotification(int64_t notifId);
+
+/**
+ * Sets the Dock-tile progress indicator.
+ *
+ * @param state     One of MNW_PROGRESS_*.
+ * @param fraction  Progress in the range 0.0–1.0 (used only when state is
+ *                  MNW_PROGRESS_NORMAL / PAUSED / ERROR; ignored otherwise).
+ *
+ * The work is dispatched asynchronously onto the main thread because AppKit/Dock
+ * APIs are main-thread-only. It is therefore only effective for a regular GUI
+ * application whose main run loop is running and which owns a Dock tile; a bare
+ * console process has no Dock tile and the call is a harmless no-op.
+ * Safe to call before MNW_Initialize (it does not depend on notification state).
+ */
+MACNOTIFYAPI void MNW_SetTaskbarProgress(int state, double fraction);
 
 #ifdef __cplusplus
 }

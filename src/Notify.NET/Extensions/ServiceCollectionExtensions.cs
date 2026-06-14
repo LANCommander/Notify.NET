@@ -72,6 +72,56 @@ namespace Notify.NET.Extensions
 
             return new NullNotificationService();
         }
+
+        /// <summary>
+        /// Registers <see cref="ITaskbarProgressService"/> as a singleton, using the
+        /// platform-appropriate backend:
+        /// <list type="bullet">
+        ///   <item><description>Windows → <see cref="WindowsTaskbarProgressService"/> (ITaskbarList3)</description></item>
+        ///   <item><description>Linux → <see cref="LinuxTaskbarProgressService"/> (Unity LauncherEntry D-Bus)</description></item>
+        ///   <item><description>macOS → <see cref="MacOSTaskbarProgressService"/> (Dock tile)</description></item>
+        ///   <item><description>Other → <see cref="NullTaskbarProgressService"/> (<see cref="ITaskbarProgressService.IsSupported"/> = false)</description></item>
+        /// </list>
+        /// </summary>
+        /// <param name="services">The service collection to add to.</param>
+        /// <param name="configure">Optional delegate to configure <see cref="NotificationOptions"/>.</param>
+        public static IServiceCollection AddTaskbarProgress(
+            this IServiceCollection services,
+            Action<NotificationOptions>? configure = null)
+        {
+            var options = new NotificationOptions();
+            configure?.Invoke(options);
+
+            services.AddSingleton<ITaskbarProgressService>(_ => CreateTaskbarService(options));
+            return services;
+        }
+
+        /// <summary>
+        /// Creates the platform-appropriate <see cref="ITaskbarProgressService"/> directly
+        /// (without a DI container), for use in simple console applications.
+        /// </summary>
+        public static ITaskbarProgressService CreateTaskbarProgressService(
+            Action<NotificationOptions>? configure = null)
+        {
+            var opts = new NotificationOptions();
+            configure?.Invoke(opts);
+            return CreateTaskbarService(opts);
+        }
+
+        private static ITaskbarProgressService CreateTaskbarService(NotificationOptions opts)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return new WindowsTaskbarProgressService();
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                return new LinuxTaskbarProgressService(
+                    opts.DesktopFileId ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                return new MacOSTaskbarProgressService();
+
+            return new NullTaskbarProgressService();
+        }
     }
 
     /// <summary>
@@ -103,6 +153,14 @@ namespace Notify.NET.Extensions
         /// Windows only — ignored on Linux and macOS.
         /// </summary>
         public string? AppIconPath { get; set; }
+
+        /// <summary>
+        /// The application's <c>.desktop</c> file id (with or without the ".desktop" suffix), e.g.
+        /// <c>"com.example.MyApp"</c>. Used by the Linux taskbar-progress backend to address the
+        /// correct launcher entry via the <c>application://&lt;id&gt;.desktop</c> URI. When null,
+        /// the process name is used. Ignored on Windows and macOS.
+        /// </summary>
+        public string? DesktopFileId { get; set; }
     }
 
     /// <summary>
@@ -120,6 +178,20 @@ namespace Notify.NET.Extensions
         public Task HideAsync(long notificationId, CancellationToken cancellationToken = default)
             => throw new Exceptions.PlatformNotSupportedException();
 
+        public void Dispose() { }
+    }
+
+    /// <summary>
+    /// No-op implementation used when the current platform has no supported taskbar-progress
+    /// backend. <see cref="IsSupported"/> is always false and every method is a silent no-op.
+    /// </summary>
+    internal sealed class NullTaskbarProgressService : ITaskbarProgressService
+    {
+        public bool IsSupported => false;
+        public void SetState(TaskbarProgressState state) { }
+        public void SetProgress(ulong completed, ulong total) { }
+        public void SetProgress(double fraction) { }
+        public void SetWindow(IntPtr windowHandle) { }
         public void Dispose() { }
     }
 }

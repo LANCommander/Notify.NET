@@ -87,5 +87,18 @@ namespace Notify.NET.Platform.MacOS
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         internal static extern bool MNW_HideNotification(long notifId);
+
+        // ------------------------------------------------------------------
+        // Dock-tile progress
+        // ------------------------------------------------------------------
+
+        internal const int MNW_PROGRESS_NONE          = 0;
+        internal const int MNW_PROGRESS_INDETERMINATE = 1;
+        internal const int MNW_PROGRESS_NORMAL        = 2;
+        internal const int MNW_PROGRESS_PAUSED        = 3;
+        internal const int MNW_PROGRESS_ERROR         = 4;
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void MNW_SetTaskbarProgress(int state, double fraction);
     }
 }

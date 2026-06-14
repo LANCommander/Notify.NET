@@ -16,6 +16,7 @@ CFLAGS  := -fobjc-arc -fvisibility=hidden -O2 -Wall -Wextra \
            -isysroot $(SDK)
 LDFLAGS := -dynamiclib \
            -framework Foundation \
+           -framework AppKit \
            -framework UserNotifications \
            -install_name @rpath/libMacNotifyWrapper.dylib
 

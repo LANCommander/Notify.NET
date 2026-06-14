@@ -20,6 +20,7 @@
 
 #define MACNOTIFYWRAPPER_EXPORTS
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 #import <UserNotifications/UserNotifications.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -441,4 +442,69 @@ bool MNW_HideNotification(int64_t notifId)
     }
 
     return true;
+}
+
+/* -------------------------------------------------------------------------
+ * Dock-tile progress
+ *
+ * AppKit Dock APIs are main-thread-only, so all work is dispatched onto the
+ * main queue. The custom content view draws the application icon with an
+ * NSProgressIndicator overlaid along the bottom edge.
+ * ------------------------------------------------------------------------- */
+
+/* Accessed only on the main thread (inside the dispatched block). */
+static NSImageView*        g_dockImageView = nil;
+static NSProgressIndicator* g_dockProgress = nil;
+
+static void EnsureDockViews(NSDockTile* tile)
+{
+    if (g_dockImageView) return;
+
+    NSImageView* iconView = [[NSImageView alloc]
+        initWithFrame:NSMakeRect(0, 0, tile.size.width, tile.size.height)];
+    iconView.image = [NSApp applicationIconImage];
+
+    NSProgressIndicator* bar = [[NSProgressIndicator alloc]
+        initWithFrame:NSMakeRect(0.0, 0.0, tile.size.width, 12.0)];
+    bar.style          = NSProgressIndicatorStyleBar;
+    bar.indeterminate  = NO;
+    bar.minValue       = 0.0;
+    bar.maxValue       = 1.0;
+    [iconView addSubview:bar];
+
+    tile.contentView = iconView;
+    g_dockImageView  = iconView;
+    g_dockProgress   = bar;
+}
+
+void MNW_SetTaskbarProgress(int state, double fraction)
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSApplication* app  = [NSApplication sharedApplication];
+        NSDockTile*    tile = [app dockTile];
+
+        if (state == MNW_PROGRESS_NONE) {
+            if (g_dockProgress) [g_dockProgress stopAnimation:nil];
+            tile.contentView = nil;
+            g_dockImageView  = nil;
+            g_dockProgress   = nil;
+            [tile display];
+            return;
+        }
+
+        EnsureDockViews(tile);
+
+        if (state == MNW_PROGRESS_INDETERMINATE) {
+            g_dockProgress.indeterminate = YES;
+            [g_dockProgress startAnimation:nil];
+        } else {
+            [g_dockProgress stopAnimation:nil];
+            g_dockProgress.indeterminate = NO;
+            double clamped = fraction < 0.0 ? 0.0 : (fraction > 1.0 ? 1.0 : fraction);
+            g_dockProgress.doubleValue = clamped;
+        }
+
+        g_dockProgress.hidden = NO;
+        [tile display];
+    });
 }

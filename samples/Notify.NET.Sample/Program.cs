@@ -119,9 +119,15 @@ services.AddNotifications(opts =>
     opts.AppName        = "Notify.NET Sample (DI)";
     opts.AppUserModelId = "NotifyNET.Sample.DI";
 });
+services.AddTaskbarProgress(opts =>
+{
+    opts.AppName       = "Notify.NET Sample (DI)";
+    opts.DesktopFileId = "NotifyNET.Sample.DI"; // Linux: matches NotifyNET.Sample.DI.desktop
+});
 
 await using var provider = services.BuildServiceProvider();
-var diService = provider.GetRequiredService<INotificationService>();
+var diService     = provider.GetRequiredService<INotificationService>();
+var diTaskbar     = provider.GetRequiredService<ITaskbarProgressService>();
 
 long id6 = await diService.ShowAsync(
     NotificationBuilder.Create("DI-registered Service")
@@ -130,6 +136,65 @@ long id6 = await diService.ShowAsync(
 
 Console.WriteLine($"  Shown with id={id6}");
 await Task.Delay(3000);
+
+// A realistic combined flow: drive the taskbar progress bar while a long-running
+// job runs, then fire a completion notification when it finishes.
+Console.WriteLine($"  Taskbar progress supported: {diTaskbar.IsSupported}");
+
+if (diTaskbar.IsSupported)
+{
+    Console.WriteLine("  Simulating a download with live taskbar progress...");
+    const int totalBytes = 100;
+    for (int sent = 0; sent <= totalBytes; sent += 10)
+    {
+        diTaskbar.SetProgress((ulong)sent, (ulong)totalBytes);
+        await Task.Delay(300);
+    }
+
+    await diService.ShowAsync(
+        NotificationBuilder.Create("Download complete")
+            .WithBody("All 100 bytes transferred.")
+            .Build());
+
+    diTaskbar.SetState(TaskbarProgressState.None); // clear the bar
+}
+
+// ------ 7. Taskbar progress via the factory (no DI) --------------------------
+Console.WriteLine("\n[7] Demonstrating taskbar progress states (factory helper)...");
+
+using var taskbar = ServiceCollectionExtensions.CreateTaskbarProgressService(opts =>
+{
+    opts.AppName       = "Notify.NET Sample";
+    opts.DesktopFileId = "NotifyNET.Sample"; // Linux: matches NotifyNET.Sample.desktop
+});
+
+Console.WriteLine($"  Taskbar progress supported: {taskbar.IsSupported}");
+
+if (taskbar.IsSupported)
+{
+    // On Windows this drives the terminal's taskbar button: ITaskbarList3 for the classic
+    // console host, and the OSC 9;4 escape sequence for Windows Terminal (the Win11 default,
+    // where the app runs under a ConPTY and ITaskbarList3 has no visible button). For a
+    // WPF/WinForms app, call taskbar.SetWindow(mainWindowHandle) first to target its window.
+    Console.WriteLine("  Normal bar at 60%...");
+    taskbar.SetProgress(0.60);
+    await Task.Delay(1500);
+
+    Console.WriteLine("  Paused state...");
+    taskbar.SetState(TaskbarProgressState.Paused);
+    await Task.Delay(1500);
+
+    Console.WriteLine("  Error state...");
+    taskbar.SetState(TaskbarProgressState.Error);
+    await Task.Delay(1500);
+
+    Console.WriteLine("  Indeterminate state...");
+    taskbar.SetState(TaskbarProgressState.Indeterminate);
+    await Task.Delay(1500);
+
+    Console.WriteLine("  Clearing progress.");
+    taskbar.SetState(TaskbarProgressState.None);
+}
 
 Console.WriteLine("\nAll done.");
 
