@@ -22,6 +22,7 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #import <UserNotifications/UserNotifications.h>
+#import <objc/runtime.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include "MacNotifyWrapper.h"
@@ -507,4 +508,155 @@ void MNW_SetTaskbarProgress(int state, double fraction)
         g_dockProgress.hidden = NO;
         [tile display];
     });
+}
+
+/* -------------------------------------------------------------------------
+ * Dock menu (jump-list equivalent)
+ *
+ * Custom Dock-menu items are supplied to AppKit through the application
+ * delegate's -applicationDockMenu:. Unlike Windows/Linux this fires a live
+ * in-process callback — there is no relaunch.
+ *
+ * All AppKit objects below are touched only on the main thread (inside the
+ * dispatched blocks); the C callback pointer is read/written under g_dockLock.
+ * ------------------------------------------------------------------------- */
+
+/* Built/replaced on the main thread; read by -applicationDockMenu: on the main thread. */
+static NSMenu*              g_dockMenu     = nil;
+/* Guards g_dockCb only (the menu is confined to the main thread). */
+static NSLock*             g_dockLock     = nil;
+static MNW_DockMenuCallback g_dockCb       = NULL;
+
+/* Target object for the menu items; routes -onItem: to the managed callback. */
+@interface MNWDockTarget : NSObject
+- (void)onItem:(id)sender;
+@end
+
+@implementation MNWDockTarget
+- (void)onItem:(id)sender
+{
+    NSString* taskId = nil;
+    if ([sender respondsToSelector:@selector(representedObject)])
+        taskId = [sender representedObject];
+    if (![taskId isKindOfClass:[NSString class]]) return;
+
+    [g_dockLock lock];
+    MNW_DockMenuCallback cb = g_dockCb;
+    [g_dockLock unlock];
+
+    if (cb) cb([taskId UTF8String]);
+}
+@end
+
+/* A minimal delegate used only when the host application has no delegate of its own. */
+@interface MNWDockDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation MNWDockDelegate
+- (NSMenu*)applicationDockMenu:(NSApplication*)sender
+{
+    (void)sender;
+    return g_dockMenu;
+}
+@end
+
+static MNWDockTarget*   g_dockTarget   = nil;
+static MNWDockDelegate* g_dockDelegate = nil;
+
+/*
+ * Implementation injected into a pre-existing delegate's class (via class_addMethod)
+ * when that delegate does not already implement -applicationDockMenu:.
+ */
+static NSMenu* mnw_dock_menu_imp(id self, SEL _cmd, NSApplication* sender)
+{
+    (void)self; (void)_cmd; (void)sender;
+    return g_dockMenu;
+}
+
+/*
+ * Ensures AppKit will call back into us for the Dock menu. Must run on the main thread.
+ *   - If the app has no delegate, install ours.
+ *   - If it has one that already implements -applicationDockMenu:, leave it alone
+ *     (we cannot compose with the app's own menu without overriding it).
+ *   - Otherwise add -applicationDockMenu: to the existing delegate's class.
+ */
+static void EnsureDockDelegate(void)
+{
+    NSApplication* app = [NSApplication sharedApplication];
+    id existing = [app delegate];
+
+    if (existing == nil) {
+        if (!g_dockDelegate) g_dockDelegate = [[MNWDockDelegate alloc] init];
+        [app setDelegate:g_dockDelegate];
+        return;
+    }
+
+    if ([existing respondsToSelector:@selector(applicationDockMenu:)])
+        return; /* The host already provides a Dock menu; do not clobber it. */
+
+    class_addMethod(object_getClass(existing),
+                    @selector(applicationDockMenu:),
+                    (IMP)mnw_dock_menu_imp,
+                    "@@:@");
+}
+
+static void EnsureDockGlobals(void)
+{
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        g_dockLock   = [[NSLock alloc] init];
+        g_dockTarget = [[MNWDockTarget alloc] init];
+    });
+}
+
+void MNW_SetDockMenuHandler(MNW_DockMenuCallback callback)
+{
+    EnsureDockGlobals();
+    [g_dockLock lock];
+    g_dockCb = callback;
+    [g_dockLock unlock];
+}
+
+void MNW_SetDockMenu(const char** ids, const char** titles, int count)
+{
+    EnsureDockGlobals();
+
+    /* Copy the C strings into NSStrings synchronously; the caller may free the
+     * arrays as soon as this function returns. */
+    NSMutableArray<NSString*>* idArr    = [NSMutableArray arrayWithCapacity:(count > 0 ? count : 0)];
+    NSMutableArray<NSString*>* titleArr = [NSMutableArray arrayWithCapacity:(count > 0 ? count : 0)];
+    for (int i = 0; i < count; i++) {
+        const char* idC    = ids    ? ids[i]    : NULL;
+        const char* titleC = titles ? titles[i] : NULL;
+        if (!idC || !titleC) continue;
+        [idArr    addObject:[NSString stringWithUTF8String:idC]];
+        [titleArr addObject:[NSString stringWithUTF8String:titleC]];
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (idArr.count == 0) {
+            g_dockMenu = nil;
+            EnsureDockDelegate();
+            return;
+        }
+
+        NSMenu* menu = [[NSMenu alloc] init];
+        for (NSUInteger i = 0; i < idArr.count; i++) {
+            NSMenuItem* item = [[NSMenuItem alloc]
+                initWithTitle:titleArr[i]
+                       action:@selector(onItem:)
+                keyEquivalent:@""];
+            item.target           = g_dockTarget;
+            item.representedObject = idArr[i];
+            [menu addItem:item];
+        }
+
+        g_dockMenu = menu;
+        EnsureDockDelegate();
+    });
+}
+
+void MNW_ClearDockMenu(void)
+{
+    MNW_SetDockMenu(NULL, NULL, 0);
 }

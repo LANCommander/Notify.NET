@@ -122,6 +122,63 @@ namespace Notify.NET.Extensions
 
             return new NullTaskbarProgressService();
         }
+
+        /// <summary>
+        /// Registers <see cref="IJumpListService"/> as a singleton, using the
+        /// platform-appropriate backend:
+        /// <list type="bullet">
+        ///   <item><description>Windows → <see cref="WindowsJumpListService"/> (ICustomDestinationList user tasks)</description></item>
+        ///   <item><description>Linux → <see cref="LinuxJumpListService"/> (freedesktop.org Desktop Actions)</description></item>
+        ///   <item><description>macOS → <see cref="MacOSJumpListService"/> (Dock menu)</description></item>
+        ///   <item><description>Other → <see cref="NullJumpListService"/> (<see cref="IJumpListService.IsSupported"/> = false)</description></item>
+        /// </list>
+        ///
+        /// On Windows and Linux a clicked task relaunches the executable with
+        /// <c>--notify-jumplist &lt;id&gt;</c>; the bundled single-instance layer forwards the id to the
+        /// running primary instance so the handler fires live. The IPC listener and OS registration
+        /// are created lazily — only when tasks or a handler are actually configured.
+        /// </summary>
+        /// <param name="services">The service collection to add to.</param>
+        /// <param name="configure">Optional delegate to configure <see cref="NotificationOptions"/>.</param>
+        public static IServiceCollection AddJumpList(
+            this IServiceCollection services,
+            Action<NotificationOptions>? configure = null)
+        {
+            var options = new NotificationOptions();
+            configure?.Invoke(options);
+
+            services.AddSingleton<IJumpListService>(_ => CreateJumpListServiceCore(options));
+            return services;
+        }
+
+        /// <summary>
+        /// Creates the platform-appropriate <see cref="IJumpListService"/> directly
+        /// (without a DI container), for use in simple console applications.
+        /// </summary>
+        public static IJumpListService CreateJumpListService(
+            Action<NotificationOptions>? configure = null)
+        {
+            var opts = new NotificationOptions();
+            configure?.Invoke(opts);
+            return CreateJumpListServiceCore(opts);
+        }
+
+        private static IJumpListService CreateJumpListServiceCore(NotificationOptions opts)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return new WindowsJumpListService(opts.AppUserModelId, opts.ExecutablePath);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                return new LinuxJumpListService(
+                    opts.AppName,
+                    opts.DesktopFileId ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName,
+                    opts.ExecutablePath);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                return new MacOSJumpListService();
+
+            return new NullJumpListService();
+        }
     }
 
     /// <summary>
@@ -161,6 +218,14 @@ namespace Notify.NET.Extensions
         /// the process name is used. Ignored on Windows and macOS.
         /// </summary>
         public string? DesktopFileId { get; set; }
+
+        /// <summary>
+        /// Absolute path to the executable a jump-list task relaunches when clicked (Windows and
+        /// Linux only). When null, the current process executable is used. For framework-dependent
+        /// <c>dotnet</c> apps the auto-detected path may be the shared host rather than your app, so
+        /// pass an explicit path in that case. Ignored on macOS (the Dock menu fires live, no relaunch).
+        /// </summary>
+        public string? ExecutablePath { get; set; }
     }
 
     /// <summary>
@@ -192,6 +257,20 @@ namespace Notify.NET.Extensions
         public void SetProgress(ulong completed, ulong total) { }
         public void SetProgress(double fraction) { }
         public void SetWindow(IntPtr windowHandle) { }
+        public void Dispose() { }
+    }
+
+    /// <summary>
+    /// No-op implementation used when the current platform has no supported jump-list backend.
+    /// <see cref="IsSupported"/> is always false and every method is a silent no-op.
+    /// </summary>
+    internal sealed class NullJumpListService : IJumpListService
+    {
+        public bool IsSupported => false;
+        public bool TryHandleActivation(string[] args) => false;
+        public void SetHandler(IJumpListHandler? handler) { }
+        public void SetTasks(System.Collections.Generic.IEnumerable<JumpListTask> tasks) { }
+        public void ClearTasks() { }
         public void Dispose() { }
     }
 }

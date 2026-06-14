@@ -146,6 +146,41 @@ MACNOTIFYAPI bool MNW_HideNotification(int64_t notifId);
  */
 MACNOTIFYAPI void MNW_SetTaskbarProgress(int state, double fraction);
 
+/* -------------------------------------------------------------------------
+ * Dock menu (jump-list equivalent)
+ *
+ * Adds custom items to the application's Dock menu (shown on right-click / click-and-hold of
+ * the Dock icon). Unlike Windows jump lists / Linux .desktop actions, Dock-menu items fire a
+ * live in-process callback — there is no relaunch.
+ *
+ * Like the Dock-tile progress API these are only effective for a regular (bundled) GUI
+ * application with a running main loop; a bare console process has no Dock menu and the calls
+ * are harmless no-ops. The wrapper provides the menu via the application delegate's
+ * -applicationDockMenu:, installing its own delegate if the app has none, or adding the method
+ * to the existing delegate's class if it does not already implement it.
+ * ------------------------------------------------------------------------- */
+
+/** Fired on the main thread when the user clicks a Dock-menu item. taskId is UTF-8. */
+typedef void (*MNW_DockMenuCallback)(const char* taskId);
+
+/** Registers the callback invoked when a Dock-menu item is clicked. Pass NULL to clear it. */
+MACNOTIFYAPI void MNW_SetDockMenuHandler(MNW_DockMenuCallback callback);
+
+/**
+ * Replaces the custom Dock-menu items.
+ *
+ * @param ids     Array of `count` UTF-8 task ids (passed back to the callback when clicked).
+ * @param titles  Array of `count` UTF-8 item labels, parallel to `ids`.
+ * @param count   Number of items (0 clears the menu).
+ *
+ * The arrays are copied before this function returns; the caller may free them afterwards.
+ * Work is dispatched onto the main thread because AppKit menus are main-thread-only.
+ */
+MACNOTIFYAPI void MNW_SetDockMenu(const char** ids, const char** titles, int count);
+
+/** Removes all custom Dock-menu items. Equivalent to MNW_SetDockMenu(NULL, NULL, 0). */
+MACNOTIFYAPI void MNW_ClearDockMenu(void);
+
 #ifdef __cplusplus
 }
 #endif
